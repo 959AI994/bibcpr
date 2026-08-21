@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>bibcpr — evidence-first BibTeX auditor</title>
+  <!-- Tailwind CDN (development). Fine for a local-only app. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js for reactivity -->
+  <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <style>
+    /* Fallback styling if Tailwind CDN can't be reached (offline). */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+    .badge-verified { background: #d1fae5; color: #065f46; }
+    .badge-high     { background: #dbeafe; color: #1e40af; }
+    .badge-medium   { background: #fef3c7; color: #92400e; }
+    .badge-low      { background: #e5e7eb; color: #374151; }
+    .sev-critical  { color: #7f1d1d; }
+    .sev-error     { color: #b91c1c; }
+    .sev-warning   { color: #a16207; }
+    .sev-info      { color: #1e40af; }
+    pre.diff       { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+    pre.diff .add  { color: #86efac; }
+    pre.diff .rm   { color: #fca5a5; }
+    pre.diff .hunk { color: #93c5fd; }
+    details > summary { cursor: pointer; }
+    .drop-active { border-color: #2563eb !important; background: #eff6ff !important; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div x-data="bibcprApp()" x-init="init()" class="max-w-6xl mx-auto p-6">
+
+    <!-- Header -->
+    <header class="flex items-baseline justify-between mb-6">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight">bibcpr</h1>
+        <p class="text-slate-500">Evidence first. LLM second. Never hallucinate metadata.</p>
+      </div>
+      <div class="text-sm text-slate-500">
+        <a class="underline" href="https://github.com/959AI994/bibcpr" target="_blank">GitHub</a>
+        · <a class="underline" href="mailto:jingxin.wang@sjtu.edu.cn">jingxin.wang@sjtu.edu.cn</a>
+      </div>
+    </header>
+
+    <!-- Stage 1: Upload -->
+    <section x-show="stage === 'upload'" class="space-y-6">
+      <div
+        @dragover.prevent="dropActive = true"
+        @dragleave.prevent="dropActive = false"
+        @drop.prevent="onDrop($event)"
+        :class="{'drop-active': dropActive}"
+        class="border-2 border-dashed border-slate-300 bg-white rounded-lg p-16 text-center transition"
+      >
+        <p class="text-lg mb-2">Drop your <code>.bib</code> file here</p>
+        <p class="text-slate-400 mb-4">or</p>
+        <label class="inline-block px-4 py-2 bg-slate-900 text-white rounded cursor-pointer hover:bg-slate-700">
+          Browse…
+          <input type="file" class="hidden" accept=".bib,text/plain" @change="onFileInput($event)" />
+        </label>
+        <p class="text-xs text-slate-400 mt-4">Your file never leaves this machine.</p>
+      </div>
+
+      <details class="bg-white rounded-lg border border-slate-200 p-4">
+        <summary class="font-medium text-slate-700">or paste your BibTeX here</summary>
+        <textarea
+          x-model="pasteText"
+          rows="10"
+          class="w-full mt-3 font-mono text-sm border border-slate-300 rounded p-2"
+          placeholder="@article{key, title={...}, author={...}, ...}"></textarea>
+        <button
+          @click="submitPaste()"
+          class="mt-2 px-4 py-2 bg-slate-900 text-white rounded hover:bg-slate-700 disabled:opacity-50"
+          :disabled="!pasteText.trim() || busy">
+          Audit pasted text
+        </button>
+      </details>
+
+      <div x-show="error" x-cloak class="p-4 bg-red-50 border border-red-200 text-red-800 rounded" x-text="error"></div>
+    </section>
+
+    <!-- Stage 2: Auditing -->
+    <section x-show="stage === 'auditing'" class="text-center py-32">
+      <p class="text-slate-500 animate-pulse text-lg" x-text="statusMessage"></p>
+    </section>
+
+    <!-- Stage 3: Review -->
+    <section x-show="stage === 'review'" x-cloak>
+      <!-- Summary bar -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4 mb-4 flex flex-wrap items-center gap-4">
+        <div class="flex-1 min-w-max">
+          <div class="text-sm text-slate-500" x-text="`${filename}`"></div>
+          <div class="text-lg">
+            <span class="font-semibold" x-text="report?.entries_total"></span> entries ·
+            <span class="font-semibold" x-text="report?.entries_with_findings"></span> with findings ·
+            <span class="font-semibold" x-text="findings.length"></span> total findings
+          </div>
+        </div>
+        <button @click="reset()" class="px-3 py-1 text-sm text-slate-600 hover:text-slate-900 underline">
+          ← upload another
+        </button>
+      </div>
+
+      <!-- Finding-type counters (clickable filter) -->
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button
+          @click="typeFilter = ''"
+          :class="typeFilter === '' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 border border-slate-300'"
+          class="px-3 py-1 text-sm rounded-full">
+          all · <span x-text="findings.length"></span>
+        </button>
+        <template x-for="[type, count] in Object.entries(summary).sort((a,b)=>b[1]-a[1])" :key="type">
+          <button
+            @click="typeFilter = (typeFilter === type ? '' : type)"
+            :class="typeFilter === type ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 border border-slate-300'"
+            class="px-3 py-1 text-sm rounded-full">
+            <span x-text="type"></span> · <span x-text="count"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- Global controls -->
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button @click="acceptAllShown(true)" class="px-3 py-1 text-sm bg-slate-100 hover:bg-slate-200 rounded">
+          Accept all shown
+        </button>
+        <button @click="acceptAllShown(false)" class="px-3 py-1 text-sm bg-slate-100 hover:bg-slate-200 rounded">
+          Reject all shown
+        </button>
+        <button @click="resetToDefault()" class="px-3 py-1 text-sm bg-slate-100 hover:bg-slate-200 rounded">
+          Reset (auto-apply verified + high)
+        </button>
+        <div class="ml-auto flex gap-2">
+          <button
+            @click="applyAndDownload('corrected')"
+            :disabled="busy"
+            class="px-4 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50">
+            <span x-text="`Apply ${nAccepted} → download corrected.bib`"></span>
+          </button>
+          <button @click="downloadReport('markdown')" class="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded">
+            audit.md
+          </button>
+          <button @click="downloadReport('json')" class="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded">
+            audit.json
+          </button>
+        </div>
+      </div>
+
+      <!-- Findings list -->
+      <div class="space-y-2">
+        <template x-for="f in visibleFindings" :key="findingId(f)">
+          <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <div class="flex items-center gap-3 p-3 border-b border-slate-100">
+              <input
+                type="checkbox"
+                :checked="isAccepted(f)"
+                @change="toggleAccepted(f)"
+                :disabled="!f.after && !isAccepted(f)"
+                class="w-4 h-4"
+              />
+              <button
+                @click="toggleExpand(f)"
+                class="flex-1 text-left flex items-center gap-3 min-w-0">
+                <code class="text-sm font-mono text-slate-700 shrink-0">@<span x-text="f.entry_key"></span></code>
+                <span class="text-sm shrink-0" :class="`sev-${f.severity}`" x-text="f.finding_type"></span>
+                <span class="ml-auto badge shrink-0" :class="`badge-${f.confidence}`" x-text="f.confidence"></span>
+              </button>
+            </div>
+            <div x-show="expanded[findingId(f)]" x-cloak class="p-4 text-sm space-y-2 bg-slate-50">
+              <template x-if="f.field">
+                <div><span class="text-slate-500">field:</span> <code x-text="f.field"></code></div>
+              </template>
+              <template x-if="f.before !== null && f.before !== undefined">
+                <div class="grid grid-cols-[80px_1fr] gap-2">
+                  <span class="text-slate-500">before:</span>
+                  <code class="break-all text-red-800" x-text="fmt(f.before)"></code>
+                </div>
+              </template>
+              <template x-if="f.after !== null && f.after !== undefined">
+                <div class="grid grid-cols-[80px_1fr] gap-2">
+                  <span class="text-slate-500">after:</span>
+                  <code class="break-all text-emerald-800" x-text="fmt(f.after)"></code>
+                </div>
+              </template>
+              <div><span class="text-slate-500">reason:</span> <span x-text="f.reason"></span></div>
+              <template x-if="f.conflict">
+                <div><span class="text-slate-500">conflict:</span> <code x-text="f.conflict"></code></div>
+              </template>
+              <template x-if="f.evidence && f.evidence.length">
+                <div>
+                  <div class="text-slate-500 mb-1">evidence:</div>
+                  <ul class="list-disc list-inside space-y-1">
+                    <template x-for="e in f.evidence">
+                      <li>
+                        <span class="font-medium" x-text="e.source"></span>
+                        <span class="text-slate-500" x-text="`(tier ${e.authority_tier})`"></span>
+                        →
+                        <a :href="e.source_url" target="_blank" class="text-blue-600 underline break-all" x-text="e.source_url"></a>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </template>
+              <div class="pt-2">
+                <button @click="loadDiff(f)" class="text-sm text-blue-700 underline">show entry diff</button>
+              </div>
+              <template x-if="diffs[f.entry_key]">
+                <pre class="diff mt-2" x-html="diffs[f.entry_key]"></pre>
+              </template>
+            </div>
+          </div>
+        </template>
+        <div x-show="!visibleFindings.length" class="text-center py-12 text-slate-500">No findings match the current filter.</div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    function bibcprApp() {
+      return {
+        stage: 'upload',      // 'upload' | 'auditing' | 'review'
+        busy: false,
+        error: '',
+        statusMessage: '',
+        dropActive: false,
+        pasteText: '',
+
+        // session
+        sid: null,
+        filename: '',
+        report: null,
+        findings: [],
+        summary: {},
+
+        // ui state
+        typeFilter: '',
+        expanded: {},
+        accepted: {},         // findingId → true/false
+        diffs: {},
+
+        init() { /* no-op */ },
+
+        // ---------------- upload ----------------
+        async onFileInput(ev) {
+          const f = ev.target.files[0];
+          if (f) await this.uploadFile(f);
+        },
+        async onDrop(ev) {
+          this.dropActive = false;
+          const f = ev.dataTransfer.files[0];
+          if (f) await this.uploadFile(f);
+        },
+        async uploadFile(file) {
+          this.error = '';
+          this.busy = true;
+          this.stage = 'auditing';
+          this.statusMessage = `Parsing ${file.name}…`;
+          try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const up = await fetch('/api/upload', {method: 'POST', body: fd});
+            if (!up.ok) throw new Error((await up.json()).detail);
+            const upJson = await up.json();
+            this.sid = upJson.session_id;
+            this.filename = upJson.filename;
+            this.statusMessage = `Fetching evidence for ${upJson.n_entries} entries (Crossref, DBLP, arXiv, OpenReview)…`;
+            await this.runAudit();
+          } catch (e) {
+            this.error = e.message || String(e);
+            this.stage = 'upload';
+          } finally {
+            this.busy = false;
+          }
+        },
+        async submitPaste() {
+          this.error = '';
+          this.busy = true;
+          this.stage = 'auditing';
+          this.statusMessage = 'Parsing pasted bib…';
+          try {
+            const up = await fetch('/api/paste', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({bib_text: this.pasteText, filename: 'pasted.bib'}),
+            });
+            if (!up.ok) throw new Error((await up.json()).detail);
+            const upJson = await up.json();
+            this.sid = upJson.session_id;
+            this.filename = upJson.filename;
+            this.statusMessage = `Fetching evidence for ${upJson.n_entries} entries…`;
+            await this.runAudit();
+          } catch (e) {
+            this.error = e.message || String(e);
+            this.stage = 'upload';
+          } finally {
+            this.busy = false;
+          }
+        },
+
+        // ---------------- audit ----------------
+        async runAudit() {
+          const r = await fetch(`/api/audit/${this.sid}`, {method: 'POST'});
+          if (!r.ok) throw new Error((await r.json()).detail);
+          const data = await r.json();
+          this.report = data.report;
+          this.findings = (data.report.findings || []).map(f => f.to_report_dict ? f.to_report_dict() : this.normalizeFinding(f));
+          // Compute summary counts
+          this.summary = {};
+          for (const f of this.findings) {
+            this.summary[f.finding_type] = (this.summary[f.finding_type] || 0) + 1;
+          }
+          // Default: pre-accept verified+high
+          this.resetToDefault();
+          this.stage = 'review';
+        },
+        normalizeFinding(f) {
+          // Backend returns AuditFinding as pydantic dict. Map to the
+          // to_report_dict()-style keys the UI expects.
+          return {
+            entry_key: f.entry_key,
+            finding_type: typeof f.finding_type === 'string' ? f.finding_type : f.finding_type?.value || String(f.finding_type),
+            severity: f.severity,
+            confidence: f.confidence,
+            field: f.field,
+            before: f.current_value,
+            after: f.suggested_value,
+            reason: f.explanation,
+            evidence: f.evidence || [],
+            conflict: f.conflict?.value || f.conflict,
+          };
+        },
+
+        // ---------------- filter / views ----------------
+        get visibleFindings() {
+          if (!this.typeFilter) return this.findings;
+          return this.findings.filter(f => f.finding_type === this.typeFilter);
+        },
+        findingId(f) { return `${f.entry_key}::${f.finding_type}`; },
+
+        // ---------------- accept / expand ----------------
+        toggleExpand(f) {
+          const id = this.findingId(f);
+          this.expanded[id] = !this.expanded[id];
+        },
+        isAccepted(f) { return !!this.accepted[this.findingId(f)]; },
+        toggleAccepted(f) {
+          const id = this.findingId(f);
+          this.accepted[id] = !this.accepted[id];
+        },
+        acceptAllShown(v) {
+          for (const f of this.visibleFindings) {
+            if (!f.after && v) continue;   // can't accept a finding with no suggested value
+            this.accepted[this.findingId(f)] = v;
+          }
+        },
+        resetToDefault() {
+          this.accepted = {};
+          for (const f of this.findings) {
+            if ((f.confidence === 'verified' || f.confidence === 'high') && f.after !== null && f.after !== undefined) {
+              this.accepted[this.findingId(f)] = true;
+            }
+          }
+        },
+        get nAccepted() {
+          return Object.values(this.accepted).filter(Boolean).length;
+        },
+
+        // ---------------- apply + download ----------------
+        async applyAndDownload(kind) {
+          this.busy = true;
+          try {
+            const acceptedIds = Object.entries(this.accepted).filter(([_, v]) => v).map(([id]) => id);
+            const r = await fetch('/api/apply', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({session_id: this.sid, accepted: acceptedIds}),
+            });
+            if (!r.ok) throw new Error((await r.json()).detail);
+            // Trigger browser download
+            window.location.href = `/api/download/${this.sid}/${kind}`;
+          } catch (e) {
+            this.error = e.message || String(e);
+          } finally {
+            this.busy = false;
+          }
+        },
+        async downloadReport(kind) {
+          window.location.href = `/api/download/${this.sid}/${kind}`;
+        },
+        async loadDiff(f) {
+          // Need /apply to have been called first to have a corrected version.
+          // If not, run a "provisional" apply with just this one finding.
+          if (!this.diffs[f.entry_key]) {
+            await this.applyProvisional();
+            const r = await fetch(`/api/diff/${this.sid}/${encodeURIComponent(f.entry_key)}`);
+            if (r.ok) {
+              const raw = await r.text();
+              this.diffs[f.entry_key] = this.colorDiff(raw);
+            }
+          }
+        },
+        async applyProvisional() {
+          // Apply the currently-accepted set (does not download).
+          const acceptedIds = Object.entries(this.accepted).filter(([_, v]) => v).map(([id]) => id);
+          await fetch('/api/apply', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({session_id: this.sid, accepted: acceptedIds}),
+          });
+        },
+        colorDiff(raw) {
+          return raw.split('\n').map(line => {
+            const esc = line.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
+            if (line.startsWith('+') && !line.startsWith('+++')) return `<span class="add">${esc}</span>`;
+            if (line.startsWith('-') && !line.startsWith('---')) return `<span class="rm">${esc}</span>`;
+            if (line.startsWith('@@')) return `<span class="hunk">${esc}</span>`;
+            return esc;
+          }).join('\n');
+        },
+
+        // ---------------- helpers ----------------
+        fmt(v) {
+          if (v === null || v === undefined) return '—';
+          if (Array.isArray(v)) {
+            return v.map(x => {
+              if (typeof x === 'object' && x !== null) {
+                if (x.formatted) return x.formatted;
+                if (x.family) {
+                  const given = (x.given || []).join(' ');
+                  return given ? `${given} ${x.family}` : x.family;
+                }
+                if (x.raw) return x.raw;
+                return JSON.stringify(x);
+              }
+              return String(x);
+            }).join(', ');
+          }
+          if (typeof v === 'object') {
+            if (v.formatted) return v.formatted;
+            if (v.raw) return v.raw;
+            return JSON.stringify(v);
+          }
+          return String(v);
+        },
+        reset() {
+          this.stage = 'upload';
+          this.sid = null;
+          this.filename = '';
+          this.report = null;
+          this.findings = [];
+          this.summary = {};
+          this.expanded = {};
+          this.accepted = {};
+          this.diffs = {};
+          this.typeFilter = '';
+          this.pasteText = '';
+          this.error = '';
+        },
+      };
+    }
+  </script>
+</body>
+</html>

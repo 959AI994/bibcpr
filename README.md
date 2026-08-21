@@ -61,6 +61,41 @@ cpr explain ./references.bib chen2024attention
 
 Global flags: `--no-network`, `--cache-dir`, `--config`, `--profile sjtu-ectl`, `-v`, `-vv`.
 
+## Web UI (desktop-style, local-only)
+
+`bibcpr` ships with a small local web app so anyone can drag-drop a
+`.bib` file and review findings visually — no terminal required after
+install.
+
+```bash
+cpr serve
+# → serving on http://127.0.0.1:8765
+# → browser opens automatically
+```
+
+The UI:
+
+- Drag-drop or paste a `.bib` file
+- Live audit against Crossref / DBLP / arXiv / OpenReview
+- Filter findings by type (venue_mismatch, author_mismatch, …)
+- Expand any finding to see **before / after / reason / evidence URLs**
+- Accept or reject each finding individually (verified + high are
+  pre-checked; medium requires your decision; low is never
+  auto-checked)
+- One-click download of `corrected.bib`, `audit.md`, `audit.json`
+- Per-entry inline diff view
+
+The server binds to `127.0.0.1` by default — **your bibliography
+never leaves your machine.** Use `--host 0.0.0.0` to expose it (and
+be aware of the privacy implications).
+
+Extra flags:
+
+```bash
+cpr serve --port 9000            # different port
+cpr serve --no-open              # don't auto-open the browser
+```
+
 ## Core promise
 
 1. Every field in a `CanonicalPublication` carries a list of
@@ -75,10 +110,11 @@ Global flags: `--no-network`, `--cache-dir`, `--config`, `--profile sjtu-ectl`, 
 
 ```
 backend/cpr/       Python package (parser, providers, resolver, audit, style, CLI)
+backend/cpr/webapp/ Local FastAPI web UI (cpr serve)
 configs/           YAML style profiles (default: sjtu-ectl)
 docs/              Architecture, evidence model, style policy, roadmap
 skills/            Agent-facing Skill scaffold
-tests/             Offline unit tests + 10 golden BibTeX cases
+tests/             Offline unit tests + 10 golden BibTeX cases + webapp tests
 benchmark/         §45 baseline metrics
 apps/, packages/   Stubs for later phases
 ```

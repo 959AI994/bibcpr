@@ -283,5 +283,22 @@ def explain(
         console.print(f"        reason:  {f.explanation}")
 
 
+# ---------------------------------------------------------------------------
+# `cpr serve`
+# ---------------------------------------------------------------------------
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option("--host", help="Bind address. Default 127.0.0.1 keeps it local.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8765,
+    no_open: Annotated[bool, typer.Option("--no-open", help="Don't auto-open the browser.")] = False,
+    verbose: Annotated[int, typer.Option("-v", "--verbose", count=True)] = 0,
+):
+    """Launch the local bibcpr web UI (http://127.0.0.1:8765 by default)."""
+    setup_logging(verbose)
+    from .webapp.server import run_server
+    run_server(host=host, port=port, open_browser=not no_open)
+
+
 if __name__ == "__main__":
     app()
+

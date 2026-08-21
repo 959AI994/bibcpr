@@ -47,6 +47,8 @@ htmlcov/
 *.corrected.bib
 reference-audit.md
 reference-audit.json
+*-audit.md
+*-audit.json
 
 # User-provided data — commit intentionally, not accidentally
 # reference.bib is the user's real fixture; keep it explicit.
