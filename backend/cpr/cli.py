@@ -284,6 +284,61 @@ def explain(
 
 
 # ---------------------------------------------------------------------------
+# `cpr export`
+# ---------------------------------------------------------------------------
+@app.command()
+def export(
+    bib: Annotated[Path, typer.Argument(exists=True, dir_okay=False, readable=True)],
+    out_dir: Annotated[Optional[Path], typer.Option("--out-dir", help="Directory for output files. Default: alongside input.")] = None,
+    llm: Annotated[str, typer.Option("--llm", help="LLM provider: auto|off|deepseek|openai|anthropic.")] = "auto",
+    llm_model: Annotated[Optional[str], typer.Option("--llm-model", help="Override default model name.")] = None,
+    no_network: Annotated[bool, typer.Option("--no-network", help="Skip evidence fetch (offline).")] = False,
+    cache_dir: Annotated[Optional[Path], typer.Option("--cache-dir")] = None,
+    profile_name: Annotated[str, typer.Option("--profile")] = "sjtu-ectl",
+    config: Annotated[Optional[Path], typer.Option("--config")] = None,
+    verbose: Annotated[int, typer.Option("-v", "--verbose", count=True)] = 0,
+):
+    """Export a verified BibTeX file.
+
+    Splits entries into `<name>.verified.bib` (guaranteed-correct — safe
+    to paste into a paper) and `<name>.needs-review.bib` (annotated with
+    reasons for manual review). Also writes `<name>.export-summary.md`.
+    """
+    setup_logging(verbose)
+    from .llm.factory import build_client
+    from .verify.exporter import export_bib, write_export_outputs
+
+    profile: StyleProfile = load_profile(config) if config else load_default_profile()
+    report, canonicals, entries = asyncio.run(_run_pipeline(bib, no_network, cache_dir))
+    _print_summary(report)
+
+    llm_client = build_client(provider=llm, model=llm_model)  # type: ignore[arg-type]
+    if llm_client.name == "stub" and llm != "off":
+        console.print(
+            "[yellow]No LLM configured (set DEEPSEEK_API_KEY/OPENAI_API_KEY/"
+            "ANTHROPIC_API_KEY or put a key in ./deepseekkey). "
+            "Continuing without LLM sanity-check.[/yellow]"
+        )
+
+    async def _do_export():
+        try:
+            return await export_bib(entries, canonicals, report.findings, profile, llm_client)
+        finally:
+            await llm_client.aclose()
+
+    result = asyncio.run(_do_export())
+
+    target_dir = out_dir if out_dir is not None else bib.parent
+    stem = bib.stem
+    v_path, n_path, s_path = write_export_outputs(result, profile, target_dir, stem)
+
+    console.print()
+    console.print(f"[green]Verified:[/green]     {v_path}  ({len(result.verified)} entries)")
+    console.print(f"[yellow]Needs review:[/yellow] {n_path}  ({len(result.needs_review)} entries)")
+    console.print(f"[dim]Summary:      {s_path}[/dim]")
+
+
+# ---------------------------------------------------------------------------
 # `cpr serve`
 # ---------------------------------------------------------------------------
 @app.command()

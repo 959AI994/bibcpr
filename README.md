@@ -57,9 +57,54 @@ cpr fix ./references.bib --interactive
 # Deep-dive one entry
 cpr verify ./references.bib chen2024attention
 cpr explain ./references.bib chen2024attention
+
+# Export a submit-ready `.verified.bib` + an annotated `.needs-review.bib`
+cpr export ./references.bib --out-dir ./out
 ```
 
 Global flags: `--no-network`, `--cache-dir`, `--config`, `--profile sjtu-ectl`, `-v`, `-vv`.
+
+## Verified export (`cpr export`)
+
+`cpr export` is the recommended output when you want a `.bib` you can
+paste straight into a paper. It splits the input into two files:
+
+- `references.verified.bib` — every entry has a strong identity (DOI /
+  arXiv id / OpenReview id), at least one evidence record from a
+  tier-A/B/C provider, no unresolved conflicts, no `error`/`critical`
+  findings, and passes the LLM sanity-check (when configured).
+- `references.needs-review.bib` — everything else, with a
+  `note = {UNVERIFIED: <reason>}` field explaining the disqualifying
+  condition.
+- `references.export-summary.md` — per-entry table with reasons.
+
+```bash
+cpr export ./references.bib                       # writes next to input
+cpr export ./references.bib --out-dir ./out       # write to ./out/
+cpr export ./references.bib --llm off             # skip LLM sanity check
+cpr export ./references.bib --llm deepseek        # use DeepSeek
+cpr export ./references.bib --llm openai          # use OpenAI
+cpr export ./references.bib --llm anthropic       # use Anthropic
+cpr export ./references.bib --no-network          # offline (most entries → needs-review)
+```
+
+**LLM key discovery order** (first hit wins, ordinary env → falls back
+to stub if none configured):
+
+1. `DEEPSEEK_API_KEY`
+2. `./deepseekkey` (first non-comment line)
+3. `OPENAI_API_KEY`
+4. `ANTHROPIC_API_KEY`
+
+`CPR_LLM_MODEL` overrides the default model name for the selected
+provider. If no key is found, the sanity-check silently degrades to a
+no-op — `cpr export` still runs.
+
+> **Rule.** The LLM is used only for routing (sanity-check, tie-break,
+> conflict resolution, id inference). Every field that survives to
+> `.verified.bib` is attested by at least one official evidence
+> provider (Crossref / DBLP / arXiv / OpenReview) — the LLM never
+> "makes up" metadata.
 
 ## Web UI (desktop-style, local-only)
 
