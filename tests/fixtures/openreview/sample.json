@@ -1,0 +1,13 @@
+{
+  "notes": [
+    {
+      "id": "ExampleForum2024",
+      "content": {
+        "title": {"value": "A Sample OpenReview Paper"},
+        "authors": {"value": ["Alice Doe", "Bob Roe"]},
+        "venue": {"value": "ICLR 2024 Poster"},
+        "venueid": {"value": "ICLR.cc/2024/Conference"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/1706.03762v7</id>
+    <title>Attention Is All You Need</title>
+    <published>2017-06-12T17:57:34Z</published>
+    <arxiv:doi xmlns:arxiv="http://arxiv.org/schemas/atom">10.48550/arXiv.1706.03762</arxiv:doi>
+    <arxiv:journal_ref xmlns:arxiv="http://arxiv.org/schemas/atom">NeurIPS 2017</arxiv:journal_ref>
+    <author><name>Ashish Vaswani</name></author>
+    <author><name>Noam Shazeer</name></author>
+    <author><name>Niki Parmar</name></author>
+    <author><name>Jakob Uszkoreit</name></author>
+    <author><name>Llion Jones</name></author>
+    <author><name>Aidan N. Gomez</name></author>
+    <author><name>Lukasz Kaiser</name></author>
+    <author><name>Illia Polosukhin</name></author>
+  </entry>
+</feed>

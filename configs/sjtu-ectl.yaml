@@ -1,0 +1,46 @@
+# SJTU ECTL default style profile — see docs/style-policy.md
+name: sjtu-ectl
+version: 1
+
+citation_key:
+  strategy: preserve
+  format: "{first_author_family}{year}{first_title_word}"
+
+publication:
+  prefer_formal_over_preprint: true
+  demote_preprint_when_formal_available: true
+  keep_arxiv_eprint_field: true
+
+authors:
+  format: "family, given"
+  join: " and "
+  abbreviate_given: false
+  hyphenated_initials_join: "-"
+
+pages:
+  article_number_prefix: null
+  double_hyphen: true
+
+fields:
+  order:
+    - author
+    - title
+    - booktitle
+    - journal
+    - year
+    - volume
+    - number
+    - pages
+    - publisher
+    - doi
+    - url
+    - eprint
+    - archivePrefix
+    - primaryClass
+  drop_if_empty:
+    - abstract
+    - keywords
+    - note
+
+unicode:
+  strategy: preserve

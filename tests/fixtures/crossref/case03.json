@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "message": {
+    "DOI": "10.1145/3576915.3623063",
+    "type": "proceedings-article",
+    "title": ["A Study on Verifiable Delay Functions"],
+    "author": [
+      {"given": "Alice", "family": "Doe"},
+      {"given": "Bob", "family": "Roe"}
+    ],
+    "container-title": ["CCS '23: Proceedings of the 2023 ACM SIGSAC Conference on Computer and Communications Security"],
+    "issued": {"date-parts": [[2023]]},
+    "page": "42:1--42:15",
+    "publisher": "ACM",
+    "URL": "https://doi.org/10.1145/3576915.3623063"
+  }
+}

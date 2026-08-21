@@ -1,0 +1,33 @@
+{
+  "result": {
+    "hits": {
+      "hit": [
+        {
+          "@score": "10",
+          "info": {
+            "type": "Conference and Workshop Papers",
+            "title": "Attention is All you Need.",
+            "authors": {
+              "author": [
+                {"text": "Ashish Vaswani"},
+                {"text": "Noam Shazeer"},
+                {"text": "Niki Parmar"},
+                {"text": "Jakob Uszkoreit"},
+                {"text": "Llion Jones"},
+                {"text": "Aidan N. Gomez"},
+                {"text": "Lukasz Kaiser"},
+                {"text": "Illia Polosukhin"}
+              ]
+            },
+            "venue": "NeurIPS",
+            "year": "2017",
+            "pages": "5998-6008",
+            "doi": "10.5555/3295222.3295349",
+            "url": "https://dblp.org/rec/conf/nips/VaswaniSPUJGKP17",
+            "key": "conf/nips/VaswaniSPUJGKP17"
+          }
+        }
+      ]
+    }
+  }
+}
